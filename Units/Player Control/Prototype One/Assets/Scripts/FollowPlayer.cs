@@ -1,10 +1,10 @@
 using UnityEngine;
 
-public class FollowPlayer : MonoBehaviour
+public class FollowPlayer1 : MonoBehaviour
 {
-    
+
     public GameObject player;
-    private Vector3 offset = new Vector3(0f, 7.94f, -21.26f); // Don't forget to explicitly make the literals float to avoid compiling error
+    private Vector3 offset = new Vector3(0, 5, -7);
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -12,8 +12,9 @@ public class FollowPlayer : MonoBehaviour
     }
 
     // Update is called once per frame
+    // //Updating after update method happens
     void LateUpdate()
-    {   // Offset the camera behind the player by adding to the player's position
+    {
         transform.position = player.transform.position + offset;
     }
 }
