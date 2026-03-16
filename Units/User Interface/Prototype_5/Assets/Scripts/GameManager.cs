@@ -8,18 +8,25 @@ using UnityEngine.UI;
 public class GameManager : MonoBehaviour
 {
     public bool isGameActive;
+    //List is more useful here for dynamic sizing
     public List<GameObject> targets;
-    
+
+    private bool hasPressedEnter = false;
     private float spawnRate = 1.0f;
     private int score;
-    private float gameTime = 60f; // Game duration in seconds
+
+    [Header("Game Settings")]
+    [SerializeField] private float startGameTime = 60f;   // starting time each round
+    private float gameTime;                               // current time
     private int highScore = 0;
-    
+
+    [Header("UI (TMP)")]
     public TextMeshProUGUI scoreText;
     public TextMeshProUGUI gameOverText;
     public TextMeshProUGUI timerText;
     public TextMeshProUGUI highScoreText;
-    
+
+    [Header("UI (Menus/Objects)")]
     public Button restartButton;
     public Button resumeButton;
     public Button quitButton;
@@ -28,291 +35,366 @@ public class GameManager : MonoBehaviour
     public GameObject settingsMenu;
     public GameObject pressEnterText;
     public GameObject difficultyButtonsPanel;
+
+    //[Header("Audio")]
     public AudioSource backgroundMusic;
     public Slider musicSlider;
-    
-    private bool isPaused = false;
     public AudioClip buttonSound;
-    
+
+    //[Header("Power Ups")]
     public GameObject powerUpPrefab;
     private GameObject activePowerUp;
-    private float powerUpDuration = 5f;
+    [SerializeField] private float powerUpDuration = 5f;
     private bool canSpawnPowerUp = true;
     private int nextPowerUpScore = 50;
-    private List<Vector3> recentSpawnPositions = new List<Vector3>();
-    private float minSpawnDistance = 1.5f;
+
+    [Header("Spawn Control")]
+    private readonly List<Vector3> recentSpawnPositions = new List<Vector3>();
+    [SerializeField] private float minSpawnDistance = 1.5f;
+
+    [Header("Crosshair/Gun UI")]
     public Texture2D crosshairTexture;
     public RectTransform gunImage;
-    
+
+    private bool isPaused = false;
 
     void Start()
     {
-        pressEnterText.SetActive(true);
-        difficultyButtonsPanel.SetActive(false);
-        pauseMenu.SetActive(false);
-        settingsMenu.SetActive(false);
-        timerText.gameObject.SetActive(false);
-        gameOverText.gameObject.SetActive(false);
-        highScoreText.gameObject.SetActive(false);
-        scoreText.gameObject.SetActive(false);
+        // Make the game safe even if you forgot to assign something in the Inspector.
+        SafeSetActive(pressEnterText, true, "pressEnterText");
+        SafeSetActive(difficultyButtonsPanel, false, "difficultyButtonsPanel");
+        SafeSetActive(pauseMenu, false, "pauseMenu");
+        SafeSetActive(settingsMenu, false, "settingsMenu");
 
+        SafeSetTMPActive(timerText, false, "timerText");
+        SafeSetTMPActive(gameOverText, false, "gameOverText");
+        SafeSetTMPActive(highScoreText, false, "highScoreText");
+        SafeSetTMPActive(scoreText, false, "scoreText");
+
+        if (restartButton != null) restartButton.gameObject.SetActive(false);
+
+        // Music
         if (backgroundMusic != null)
         {
             backgroundMusic.volume = 1.0f;
-            backgroundMusic.Play();
+            if (!backgroundMusic.isPlaying) backgroundMusic.Play();
         }
 
         if (musicSlider != null)
         {
             musicSlider.onValueChanged.RemoveAllListeners();
             musicSlider.value = 1.0f;
-            backgroundMusic.volume = 1.0f; 
+            if (backgroundMusic != null) backgroundMusic.volume = 1.0f;
             musicSlider.onValueChanged.AddListener(AdjustMusicVolume);
         }
 
         highScore = PlayerPrefs.GetInt("HighScore", 0);
-    }
-    
-   void Update()
-{
-    if (!hasPressedEnter && Input.GetKeyDown(KeyCode.Return))
-    {
-        hasPressedEnter = true;
-        pressEnterText.SetActive(false);
-        difficultyButtonsPanel.SetActive(true);
-    }
+        gameTime = startGameTime;
 
-    if (!isGameActive) return; // Only process input when the game is active
-
-    if (Input.GetKeyDown(KeyCode.Escape))
-    {
-        if (settingsMenu.activeSelf)
+        if (highScoreText != null)
         {
-            CloseSettings();
-        }
-        else
-        {
-            TogglePause();
+            highScoreText.text = "High Score: " + highScore;
         }
     }
 
-    // Move gun image horizontally based on mouse position
-    Vector3 mousePosition = Input.mousePosition;
-    gunImage.position = new Vector3(mousePosition.x, gunImage.position.y, gunImage.position.z);
-}
+    void Update()
+    {
+        // Press Enter flow
+        if (!hasPressedEnter && Input.GetKeyDown(KeyCode.Return))
+        {
+            hasPressedEnter = true;
+            SafeSetActive(pressEnterText, false, "pressEnterText");
+            SafeSetActive(difficultyButtonsPanel, false, "difficultyButtonsPanel");
+            StartGame(1); // default difficulty
+        }
+
+        if (!isGameActive) return;
+
+        // Escape key flow
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (settingsMenu != null && settingsMenu.activeSelf)
+            {
+                CloseSettings();
+            }
+            else
+            {
+                TogglePause();
+            }
+        }
+
+        // Move gun image with mouse (only if assigned)
+        if (gunImage != null)
+        {
+            Vector3 mousePosition = Input.mousePosition;
+            gunImage.position = new Vector3(mousePosition.x, gunImage.position.y, gunImage.position.z);
+        }
+    }
+
+    public void StartGame(int difficulty)
+    {
+        // Defensive checks
+        if (targets == null || targets.Count == 0)
+        {
+            Debug.LogError("Targets list is empty on GameManager. Add target prefabs to the list.");
+            return;
+        }
+
+        if (difficulty <= 0) difficulty = 1;
+
+        spawnRate = 1.0f;           // reset spawn rate each new game
+        spawnRate /= difficulty;
+
+        isGameActive = true;
+        isPaused = false;
+        Time.timeScale = 1f;
+
+        score = 0;
+        nextPowerUpScore = 50;
+        canSpawnPowerUp = true;
+
+        // reset timer every round
+        gameTime = startGameTime;
+
+        UpdateScore(0);
+
+        if (restartButton != null) restartButton.gameObject.SetActive(false);
+        SafeSetActive(titleScreen, false, "titleScreen");
+        SafeSetTMPActive(timerText, true, "timerText");
+        SafeSetTMPActive(scoreText, true, "scoreText");
+        SafeSetTMPActive(gameOverText, false, "gameOverText");
+        SafeSetTMPActive(highScoreText, false, "highScoreText");
+        SafeSetActive(pauseMenu, false, "pauseMenu");
+        SafeSetActive(settingsMenu, false, "settingsMenu");
+
+        if (crosshairTexture != null)
+        {
+            Cursor.SetCursor(
+                crosshairTexture,
+                new Vector2(crosshairTexture.width / 2f, crosshairTexture.height / 2f),
+                CursorMode.Auto
+            );
+        }
+
+        StartCoroutine(SpawnTarget());
+        StartCoroutine(GameTimer());
+    }
 
     public void GameOver()
     {
-    restartButton.gameObject.SetActive(true);
-    gameOverText.gameObject.SetActive(true);
-    isGameActive = false;
-    pauseMenu.SetActive(false);
+        isGameActive = false;
+        isPaused = false;
 
-    // Reset time scale in case slow-motion was active
-    Time.timeScale = 1f;
+        // Reset time scale in case slow-motion or pause was active
+        Time.timeScale = 1f;
 
-    if (score > highScore)
-    {
-        highScore = score;
-        PlayerPrefs.SetInt("HighScore", highScore);
-        PlayerPrefs.Save();
+        if (restartButton != null) restartButton.gameObject.SetActive(true);
+        SafeSetTMPActive(gameOverText, true, "gameOverText");
+        SafeSetActive(pauseMenu, false, "pauseMenu");
+        SafeSetActive(settingsMenu, false, "settingsMenu");
+
+        // Save high score
+        if (score > highScore)
+        {
+            highScore = score;
+            PlayerPrefs.SetInt("HighScore", highScore);
+            PlayerPrefs.Save();
+        }
+
+        if (highScoreText != null)
+        {
+            highScoreText.text = "High Score: " + highScore;
+            highScoreText.gameObject.SetActive(true);
+        }
+
+        // Cleanup power-up if one is active
+        if (activePowerUp != null)
+        {
+            Destroy(activePowerUp);
+            activePowerUp = null;
+        }
+        canSpawnPowerUp = true;
     }
 
-    highScoreText.text = "High Score: " + highScore;
-    highScoreText.gameObject.SetActive(true);
-    }
     IEnumerator SpawnTarget()
     {
         while (isGameActive)
         {
             yield return new WaitForSeconds(spawnRate);
-            
+
             Vector3 spawnPosition = GetValidSpawnPosition();
             int index = Random.Range(0, targets.Count);
             Instantiate(targets[index], spawnPosition, Quaternion.identity);
-            
-            if (score >= nextPowerUpScore && canSpawnPowerUp && activePowerUp == null)
+
+            if (score >= nextPowerUpScore && canSpawnPowerUp && activePowerUp == null && powerUpPrefab != null)
             {
                 SpawnPowerUp();
                 nextPowerUpScore += 50;
             }
         }
     }
-    
+
     private Vector3 GetValidSpawnPosition()
-{
-    Vector3 newSpawnPosition;
-    bool positionValid;
-    int maxAttempts = 10; // Prevent infinite loops
-    int attempts = 0;
-
-    do
     {
-        positionValid = true;
-        newSpawnPosition = new Vector3(Random.Range(-4f, 4f), -2, 0);
+        Vector3 newSpawnPosition;
+        bool positionValid;
+        int maxAttempts = 10;
+        int attempts = 0;
 
-        foreach (Vector3 recentPosition in recentSpawnPositions)
+        do
         {
-            if (Vector3.Distance(newSpawnPosition, recentPosition) < minSpawnDistance)
+            positionValid = true;
+            newSpawnPosition = new Vector3(Random.Range(-4f, 4f), -2f, 0f);
+
+            foreach (Vector3 recentPosition in recentSpawnPositions)
             {
-                positionValid = false;
-                break;
+                if (Vector3.Distance(newSpawnPosition, recentPosition) < minSpawnDistance)
+                {
+                    positionValid = false;
+                    break;
+                }
             }
-        }
 
-        attempts++;
-        if (attempts >= maxAttempts)
-        {
-            break; // Prevent infinite loop if no valid position is found
+            attempts++;
+            if (attempts >= maxAttempts) break;
         }
-    }
-    while (!positionValid);
+        while (!positionValid);
 
-    recentSpawnPositions.Add(newSpawnPosition);
-    if (recentSpawnPositions.Count > 5)
-    {
-        recentSpawnPositions.RemoveAt(0);
+        recentSpawnPositions.Add(newSpawnPosition);
+        if (recentSpawnPositions.Count > 5) recentSpawnPositions.RemoveAt(0);
+
+        return newSpawnPosition;
     }
 
-    return newSpawnPosition;
-}
-
-    
     public void UpdateScore(int scoreToAdd)
     {
         score += scoreToAdd;
-        scoreText.text = "Score: " + score;
+        if (scoreText != null) scoreText.text = "Score: " + score;
     }
-    
-    
+
     private void SpawnPowerUp()
-{
-    Vector3 spawnPosition = GetPowerUpSpawnPosition(); // New method for better positioning
-
-    activePowerUp = Instantiate(powerUpPrefab, spawnPosition, Quaternion.identity);
-    activePowerUp.transform.localScale = new Vector3(1.5f, 1.5f, 1.5f);
-    canSpawnPowerUp = false;
-
-    StartCoroutine(RemovePowerUpAfterTime());
-}
-private Vector3 GetPowerUpSpawnPosition()
-{
-    Vector3 spawnPosition;
-    bool positionValid;
-    int maxAttempts = 10; // Prevent infinite loop
-    int attempts = 0;
-
-    float minY = gunImage.position.y + 1.5f; // Ensure power-ups spawn above the gun
-    float maxY = 4f; // Adjust this based on your game area
-
-    do
     {
-        positionValid = true;
-        spawnPosition = new Vector3(Random.Range(-4f, 4f), Random.Range(minY, maxY), 0);
+        if (powerUpPrefab == null) return;
 
-        foreach (Vector3 recentPosition in recentSpawnPositions)
+        Vector3 spawnPosition = GetPowerUpSpawnPosition();
+
+        activePowerUp = Instantiate(powerUpPrefab, spawnPosition, Quaternion.identity);
+        activePowerUp.transform.localScale = new Vector3(1.5f, 1.5f, 1.5f);
+
+        canSpawnPowerUp = false;
+        StartCoroutine(RemovePowerUpAfterTime());
+    }
+
+    private Vector3 GetPowerUpSpawnPosition()
+    {
+        Vector3 spawnPosition;
+        bool positionValid;
+        int maxAttempts = 10;
+        int attempts = 0;
+
+        // If gunImage isn't assigned, use a safe default
+        float minY = (gunImage != null) ? gunImage.position.y + 1.5f : 0.5f;
+        float maxY = 4f;
+
+        do
         {
-            if (Vector3.Distance(spawnPosition, recentPosition) < minSpawnDistance)
+            positionValid = true;
+            spawnPosition = new Vector3(Random.Range(-4f, 4f), Random.Range(minY, maxY), 0f);
+
+            foreach (Vector3 recentPosition in recentSpawnPositions)
             {
-                positionValid = false;
-                break;
+                if (Vector3.Distance(spawnPosition, recentPosition) < minSpawnDistance)
+                {
+                    positionValid = false;
+                    break;
+                }
             }
-        }
 
-        attempts++;
-        if (attempts >= maxAttempts)
-        {
-            break; // Stop if no valid position is found after multiple attempts
+            attempts++;
+            if (attempts >= maxAttempts) break;
         }
-    }
-    while (!positionValid);
+        while (!positionValid);
 
-    return spawnPosition;
-}
+        return spawnPosition;
+    }
 
-    public void RestartGame()
-    {   
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-    }
-    
-    public void StartGame(int difficulty)
-    {
-        spawnRate /= difficulty;
-        isGameActive = true;
-        
-        StartCoroutine(SpawnTarget());
-        StartCoroutine(GameTimer());
-        
-        score = 0;
-        nextPowerUpScore = 50;
-        UpdateScore(0);
-        
-        titleScreen.gameObject.SetActive(false);
-        timerText.gameObject.SetActive(true);
-        scoreText.gameObject.SetActive(true);
-        Cursor.SetCursor(crosshairTexture, new Vector2(crosshairTexture.width / 2, crosshairTexture.height / 2), CursorMode.Auto);
-    }
-    
-    IEnumerator GameTimer()
-    {
-        while (gameTime > 0 && isGameActive)
-        {
-            gameTime--;
-            timerText.text = "Time: " + gameTime;
-            yield return new WaitForSeconds(1f);
-        }
-        GameOver();
-    }
-    
     IEnumerator RemovePowerUpAfterTime()
     {
         yield return new WaitForSeconds(powerUpDuration);
+
         if (activePowerUp != null)
         {
             Destroy(activePowerUp);
+            activePowerUp = null;
         }
+
         canSpawnPowerUp = true;
     }
+
     public void ActivatePowerUp()
     {
         if (activePowerUp != null)
         {
             Destroy(activePowerUp);
+            activePowerUp = null;
             StartCoroutine(SlowTime());
         }
     }
-    
+
     IEnumerator SlowTime()
     {
         Time.timeScale = 0.5f;
         yield return new WaitForSecondsRealtime(powerUpDuration);
         Time.timeScale = 1f;
     }
-    
+
+    public void RestartGame()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    IEnumerator GameTimer()
+    {
+        // Ensure timerText exists before we try to write to it
+        while (gameTime > 0f && isGameActive)
+        {
+            gameTime -= 1f;
+
+            if (timerText != null)
+                timerText.text = "Time: " + Mathf.CeilToInt(gameTime);
+
+            yield return new WaitForSeconds(1f);
+        }
+
+        if (isGameActive) GameOver();
+    }
+
     public void TogglePause()
     {
         isPaused = !isPaused;
-        pauseMenu.SetActive(isPaused);
-        Time.timeScale = isPaused ? 0 : 1;
+
+        if (pauseMenu != null) pauseMenu.SetActive(isPaused);
+
+        Time.timeScale = isPaused ? 0f : 1f;
     }
-    
+
     public void ResumeGame()
     {
         isPaused = false;
-        pauseMenu.SetActive(false);
-        Time.timeScale = 1;
+        if (pauseMenu != null) pauseMenu.SetActive(false);
+        Time.timeScale = 1f;
     }
-    
+
     public void OpenSettings()
     {
-        settingsMenu.SetActive(true);
+        if (settingsMenu != null) settingsMenu.SetActive(true);
     }
-    
+
     public void CloseSettings()
     {
-        settingsMenu.SetActive(false);
+        if (settingsMenu != null) settingsMenu.SetActive(false);
     }
-    
+
     public void AdjustMusicVolume(float volume)
     {
         if (backgroundMusic != null)
@@ -320,7 +402,7 @@ private Vector3 GetPowerUpSpawnPosition()
             backgroundMusic.volume = volume;
         }
     }
-    
+
     public void PlayButtonSound()
     {
         if (buttonSound != null && backgroundMusic != null)
@@ -328,9 +410,22 @@ private Vector3 GetPowerUpSpawnPosition()
             backgroundMusic.PlayOneShot(buttonSound);
         }
     }
-    
+
     public void QuitGame()
     {
         Application.Quit();
+    }
+
+    // ---------- Helpers ----------
+    private void SafeSetActive(GameObject obj, bool value, string fieldName)
+    {
+        if (obj != null) obj.SetActive(value);
+        else Debug.LogWarning($"{fieldName} is not assigned in the Inspector (GameManager).");
+    }
+
+    private void SafeSetTMPActive(TextMeshProUGUI tmp, bool value, string fieldName)
+    {
+        if (tmp != null) tmp.gameObject.SetActive(value);
+        else Debug.LogWarning($"{fieldName} is not assigned in the Inspector (GameManager).");
     }
 }
