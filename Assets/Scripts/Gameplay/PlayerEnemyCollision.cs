@@ -6,9 +6,6 @@ using static Platformer.Core.Simulation;
 
 namespace Platformer.Gameplay
 {
-    /// <summary>
-    /// Fired when a Player collides with an Enemy.
-    /// </summary>
     public class PlayerEnemyCollision : Simulation.Event<PlayerEnemyCollision>
     {
         public EnemyController enemy;
@@ -18,23 +15,20 @@ namespace Platformer.Gameplay
 
         public override void Execute()
         {
-            // Safety check: if player is missing, do nothing
             if (player == null)
                 return;
 
-            // If enemy is missing, default to hurting the player
-            // This prevents NullReferenceException
             if (enemy == null)
             {
-                Schedule<PlayerDeath>();
+                Die();
                 return;
             }
 
-            var willHurtEnemy = player.Bounds.center.y >= enemy.Bounds.max.y;
+            bool willHurtEnemy = player.Bounds.center.y >= enemy.Bounds.max.y;
 
             if (willHurtEnemy)
             {
-                var enemyHealth = enemy.GetComponent<Health>();
+                Health enemyHealth = enemy.GetComponent<Health>();
 
                 if (enemyHealth != null)
                 {
@@ -58,8 +52,25 @@ namespace Platformer.Gameplay
             }
             else
             {
-                Schedule<PlayerDeath>();
+                Die();
             }
+        }
+
+        void Die()
+        {
+            if (ScoreUI.instance != null)
+            {
+                ScoreUI.instance.ResetPoints();
+            }
+
+            GameOverUI gameOverUI = Object.FindFirstObjectByType<GameOverUI>();
+            if (gameOverUI != null && player != null)
+            {
+                Vector3 popupPosition = player.transform.position + new Vector3(0f, 1.5f, 0f);
+                gameOverUI.Show(popupPosition);
+            }
+
+            Schedule<PlayerDeath>();
         }
     }
 }

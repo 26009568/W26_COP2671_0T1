@@ -5,20 +5,27 @@ using UnityEngine;
 
 namespace Platformer.Gameplay
 {
-    /// <summary>
-    /// Fired when a player collides with a token.
-    /// </summary>
-    /// <typeparam name="PlayerCollision"></typeparam>
     public class PlayerTokenCollision : Simulation.Event<PlayerTokenCollision>
     {
         public PlayerController player;
         public TokenInstance token;
 
-        PlatformerModel model = Simulation.GetModel<PlatformerModel>();
-
         public override void Execute()
         {
-            AudioSource.PlayClipAtPoint(token.tokenCollectAudio, token.transform.position);
+            if (token == null) return;
+            if (!token.collected) return;
+
+            if (token.tokenCollectAudio != null)
+            {
+                AudioSource.PlayClipAtPoint(token.tokenCollectAudio, token.transform.position);
+            }
+
+            if (ScoreUI.instance != null)
+            {
+                ScoreUI.instance.AddPoint();
+            }
+
+            Object.Destroy(token.gameObject);
         }
     }
 }

@@ -6,14 +6,12 @@ using static Platformer.Core.Simulation;
 
 namespace Platformer.Mechanics
 {
-    /// <summary>
-    /// A simple controller for enemies. Provides movement control over a patrol path.
-    /// </summary>
     [RequireComponent(typeof(AnimationController), typeof(Collider2D))]
     public class EnemyController : MonoBehaviour
     {
         public PatrolPath path;
         public AudioClip ouch;
+        public bool canMove = false;
 
         internal PatrolPath.Mover mover;
         internal AnimationController control;
@@ -37,11 +35,18 @@ namespace Platformer.Mechanics
         {
             if (isDead) return;
 
-            var player = collision.gameObject.GetComponent<PlayerController>();
+            PlayerController player = collision.gameObject.GetComponentInParent<PlayerController>();
 
             if (player != null)
             {
-                // Player hit enemy from above
+                PlayerPowerUp power = player.GetComponent<PlayerPowerUp>();
+
+                if (power != null && power.isInvincible)
+                {
+                    Debug.Log("Player is invincible");
+                    return;
+                }
+
                 if (collision.contacts.Length > 0 && collision.contacts[0].normal.y < -0.5f)
                 {
                     Die();
@@ -59,6 +64,12 @@ namespace Platformer.Mechanics
         {
             if (isDead) return;
 
+            if (!canMove)
+            {
+                control.move.x = 0;
+                return;
+            }
+
             if (path != null)
             {
                 if (mover == null)
@@ -67,27 +78,28 @@ namespace Platformer.Mechanics
                 control.move.x = Mathf.Clamp(mover.Position.x - transform.position.x, -1, 1);
             }
         }
-void Die()
-{
-    if (isDead) return;
-    isDead = true;
 
-    control.move = Vector2.zero;
-    control.enabled = false;
-    _collider.enabled = false;
+        void Die()
+        {
+            if (isDead) return;
+            isDead = true;
 
-    if (_audio != null && ouch != null)
-    {
-        _audio.PlayOneShot(ouch);
-    }
+            control.move = Vector2.zero;
+            control.enabled = false;
+            _collider.enabled = false;
 
-    Animator animator = GetComponent<Animator>();
-    if (animator != null)
-    {
-        animator.SetTrigger("Death");
-    }
+            if (_audio != null && ouch != null)
+            {
+                _audio.PlayOneShot(ouch);
+            }
 
-    Destroy(gameObject, 0.8f);
-}
+            Animator animator = GetComponent<Animator>();
+            if (animator != null)
+            {
+                animator.SetTrigger("Death");
+            }
+
+            Destroy(gameObject, 0.8f);
+        }
     }
 }
