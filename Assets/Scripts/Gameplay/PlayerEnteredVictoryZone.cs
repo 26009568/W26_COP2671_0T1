@@ -1,14 +1,10 @@
 using Platformer.Core;
 using Platformer.Mechanics;
 using Platformer.Model;
+using UnityEngine;
 
 namespace Platformer.Gameplay
 {
-
-    /// <summary>
-    /// This event is triggered when the player character enters a trigger with a VictoryZone component.
-    /// </summary>
-    /// <typeparam name="PlayerEnteredVictoryZone"></typeparam>
     public class PlayerEnteredVictoryZone : Simulation.Event<PlayerEnteredVictoryZone>
     {
         public VictoryZone victoryZone;
@@ -19,6 +15,11 @@ namespace Platformer.Gameplay
         {
             model.player.animator.SetTrigger("victory");
             model.player.controlEnabled = false;
+
+            if (LevelCompletedUI.instance != null)
+            {
+                LevelCompletedUI.instance.Show();
+            }
         }
     }
 }

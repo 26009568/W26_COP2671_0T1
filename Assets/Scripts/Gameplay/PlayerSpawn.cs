@@ -1,6 +1,7 @@
 using Platformer.Core;
 using Platformer.Mechanics;
 using Platformer.Model;
+using UnityEngine;
 
 namespace Platformer.Gameplay
 {
@@ -13,17 +14,27 @@ namespace Platformer.Gameplay
 
         public override void Execute()
         {
+            Debug.Log("PlayerSpawn ran");
+
             var player = model.player;
+
             player.collider2d.enabled = true;
             player.controlEnabled = false;
+
             if (player.audioSource && player.respawnAudio)
                 player.audioSource.PlayOneShot(player.respawnAudio);
+
             player.health.Increment();
-            player.Teleport(model.spawnPoint.transform.position);
+
+            // TEMPORARILY DISABLED (this is what teleports you)
+            // player.Teleport(model.spawnPoint.transform.position);
+
             player.jumpState = PlayerController.JumpState.Grounded;
             player.animator.SetBool("dead", false);
+
             model.virtualCamera.Follow = player.transform;
             model.virtualCamera.LookAt = player.transform;
+
             Simulation.Schedule<EnablePlayerInput>(2f);
         }
     }
